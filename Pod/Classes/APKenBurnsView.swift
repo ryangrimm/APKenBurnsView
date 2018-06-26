@@ -5,14 +5,14 @@
 import Foundation
 import UIKit
 import QuartzCore
-
+import AVFoundation
 
 @objc public protocol APKenBurnsViewDataSource {
     /*
         Main data source method. Data source should provide next image.
         If no image provided (data source returns nil) then previous image will be used one more time.
     */
-    func nextImageForKenBurnsView(kenBurnsView: APKenBurnsView) -> UIImage?
+    func nextItemForKenBurnsView(kenBurnsView: APKenBurnsView) -> APKenBurnsItem?
 }
 
 
@@ -21,7 +21,7 @@ import QuartzCore
     /*
         Called when transition starts from one image to another
     */
-    @objc optional func kenBurnsViewDidStartTransition(kenBurnsView: APKenBurnsView, toImage: UIImage)
+    @objc optional func kenBurnsViewDidStartTransition(kenBurnsView: APKenBurnsView, toItem: APKenBurnsItem)
 
     /*
         Called when transition from one image to another is finished
@@ -121,26 +121,28 @@ public class APKenBurnsView: UIView {
 
         animationDataSource = buildAnimationDataSource()
 
-        firstImageView.alpha = 1.0
-        secondImageView.alpha = 0.0
+        firstItemView.alpha = 1.0
+        secondItemView.alpha = 0.0
 
         stopWatch = StopWatch()
 
-        let image = dataSource?.nextImageForKenBurnsView(kenBurnsView: self)
-        startTransitionWithImage(image: image!, imageView: firstImageView, nextImageView: secondImageView)
+        let item = dataSource?.nextItemForKenBurnsView(kenBurnsView: self)
+        if item != nil {
+            startTransitionWithItem(item: item!, itemView: firstItemView, nextItemView: secondItemView)
+        }
     }
 
     public func pauseAnimations() {
-        firstImageView.backupAnimations()
-        secondImageView.backupAnimations()
+        firstItemView.backupAnimations()
+        secondItemView.backupAnimations()
 
         timer?.pause()
         layer.pauseAnimations()
     }
 
     public func resumeAnimations() {
-        firstImageView.restoreAnimations()
-        secondImageView.restoreAnimations()
+        firstItemView.restoreAnimations()
+        secondItemView.restoreAnimations()
 
         timer?.resume()
         layer.resumeAnimations()
@@ -154,8 +156,8 @@ public class APKenBurnsView: UIView {
 
     // MARK: - Private Variables
 
-    private var firstImageView: UIImageView!
-    private var secondImageView: UIImageView!
+    private var firstItemView: ItemView!
+    private var secondItemView: ItemView!
 
     private var animationDataSource: AnimationDataSource!
     private var facesDrawer: FacesDrawerProtocol!
@@ -169,8 +171,8 @@ public class APKenBurnsView: UIView {
     // MARK: - Setup
 
     private func setup() {
-        firstImageView = buildDefaultImageView()
-        secondImageView = buildDefaultImageView()
+        firstItemView = buildDefaultItemView()
+        secondItemView = buildDefaultItemView()
         facesDrawer = FacesDrawer()
     }
 
@@ -235,66 +237,88 @@ public class APKenBurnsView: UIView {
         return animationDataSourceFactory.buildAnimationDataSource()
     }
 
-    private func startTransitionWithImage(image: UIImage, imageView: UIImageView, nextImageView: UIImageView) {
+    private func startTransitionWithItem(item: APKenBurnsItem, itemView: ItemView, nextItemView: ItemView) {
         guard isValidAnimationDurations() else {
             fatalError("Animation durations setup is invalid!")
         }
 
-           DispatchQueue.main.async {
+        DispatchQueue.main.async {
             self.stopWatch.start()
 
-            var animation = self.animationDataSource.buildAnimationForImage(image: image, forViewPortSize: self.bounds.size)
-
             DispatchQueue.main.async {
-                
+                let duration = item.duration != nil ? item.duration! : self.buildAnimationDuration()
+                var delay: Double
 
-                let animationTimeCompensation = self.stopWatch.duration
-                animation = ImageAnimation(startState: animation.startState,
-                                           endState: animation.endState,
-                                           duration: animation.duration - animationTimeCompensation)
+                if item.itemType == .image {
+                    var animation = self.animationDataSource.buildAnimationForImage(image: item.image!, forViewPortSize: self.bounds.size)
 
-                imageView.image = image
-                imageView.animateWithImageAnimation(animation: animation)
+                    let animationTimeCompensation = self.stopWatch.duration
+                    animation = ImageAnimation(startState: animation.startState,
+                                               endState: animation.endState,
+                                               duration: animation.duration - animationTimeCompensation)
+                    
+                    itemView.item = item
+                    itemView.animateWithImageAnimation(animation: animation)
 
-                if self.showFaceRectangles {
-                    self.facesDrawer.drawFacesInView(view: imageView, image: image)
+                    if self.showFaceRectangles {
+                        self.facesDrawer.drawFacesInView(view: itemView.imageView!, image: item.image!)
+                    }
+                    
+                    delay = animation.duration - duration / 2
                 }
-
-                let duration = self.buildAnimationDuration()
-                let delay = animation.duration - duration / 2
+                else {
+                    delay = Double(CMTimeGetSeconds((item.player?.currentItem?.asset.duration)!))
+                    if delay > duration {
+                        delay = duration
+                    }
+                    
+                    itemView.item = item
+                    itemView.transform = CGAffineTransform.identity
+                    item.player?.seek(to: CMTimeMake(0, 30))
+                    item.player?.play()
+                }
+                
+                // Prefetch the next item
+                var nextItem = self.dataSource?.nextItemForKenBurnsView(kenBurnsView: self)
 
                 self.startTimerWithDelay(delay: delay) {
 
-                    self.delegate?.kenBurnsViewDidStartTransition?(kenBurnsView: self, toImage: image)
+                    self.delegate?.kenBurnsViewDidStartTransition?(kenBurnsView: self, toItem: item)
 
-                    self.animateTransitionWithDuration(duration: duration, imageView: imageView, nextImageView: nextImageView) {
+                    // Hold on to the current player because by the time the animation is finished the reference to the player has been lost
+                    var currentPlayer = item.itemType == .video ? itemView.item?.player : nil
+                    
+                    self.animateTransitionWithDuration(duration: duration, itemView: itemView, nextItemView: nextItemView) {
+                        if let player = currentPlayer {
+                            player.pause()
+                        }
+                        
                         self.delegate?.kenBurnsViewDidFinishTransition?(kenBurnsView: self)
-                        self.facesDrawer.cleanUpForView(view: imageView)
+                        if self.showFaceRectangles && item.itemType == .image {
+                            self.facesDrawer.cleanUpForView(view: itemView.imageView!)
+                        }
                     }
 
-                    var nextImage = self.dataSource?.nextImageForKenBurnsView(kenBurnsView: self)
-                    if nextImage == nil {
-                        nextImage = image
+                    if nextItem == nil {
+                        nextItem = item
                     }
 
-                    self.startTransitionWithImage(image: nextImage!, imageView: nextImageView, nextImageView: imageView)
+                    self.startTransitionWithItem(item: nextItem!, itemView: nextItemView, nextItemView: itemView)
                 }
             }
         }
     }
 
-    private func animateTransitionWithDuration(duration: Double, imageView: UIImageView, nextImageView: UIImageView, completion: @escaping () -> ()) {
+    private func animateTransitionWithDuration(duration: Double, itemView: ItemView, nextItemView: ItemView, completion: @escaping () -> ()) {
         UIView.animate(withDuration: duration,
                                    delay: 0.0,
                                    options: UIViewAnimationOptions.curveEaseInOut,
                                    animations: {
-                                       imageView.alpha = 0.0
-                                       nextImageView.alpha = 1.0
+                                       itemView.alpha = 0.0
+                                       nextItemView.alpha = 1.0
                                    },
-                                   completion: {
-                                       finished in
-
-                                       completion()
+                                   completion: { finished in
+                                        completion()
                                    })
     }
 
@@ -313,12 +337,12 @@ public class APKenBurnsView: UIView {
                (transitionAnimationDuration - transitionAnimationDurationDeviation) / 2 > 0.0
     }
 
-    private func buildDefaultImageView() -> UIImageView {
-        let imageView = UIImageView(frame: bounds)
-        imageView.autoresizingMask = [.flexibleHeight, .flexibleWidth]
-        imageView.contentMode = UIViewContentMode.center
-        self.addSubview(imageView)
+    private func buildDefaultItemView() -> ItemView {
+        let itemView = ItemView(frame: bounds)
+        itemView.autoresizingMask = [.flexibleHeight, .flexibleWidth]
+        itemView.contentMode = UIViewContentMode.center
+        self.addSubview(itemView)
 
-        return imageView
+        return itemView
     }
 }

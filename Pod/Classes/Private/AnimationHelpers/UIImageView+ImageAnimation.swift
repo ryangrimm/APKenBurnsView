@@ -6,7 +6,7 @@ import Foundation
 import UIKit
 import CoreFoundation
 
-extension UIImageView {
+extension UIView {
 
     // MARK: - Public
 
