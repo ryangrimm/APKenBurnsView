@@ -286,7 +286,7 @@ public class APKenBurnsView: UIView {
                     self.delegate?.kenBurnsViewDidStartTransition?(kenBurnsView: self, toItem: item)
 
                     // Hold on to the current player because by the time the animation is finished the reference to the player has been lost
-                    var currentPlayer = item.itemType == .video ? itemView.item?.player : nil
+                    let currentPlayer = item.itemType == .video ? itemView.item?.player : nil
                     
                     self.animateTransitionWithDuration(duration: duration, itemView: itemView, nextItemView: nextItemView) {
                         if let player = currentPlayer {
