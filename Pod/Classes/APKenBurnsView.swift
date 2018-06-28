@@ -116,7 +116,7 @@ public class APKenBurnsView: UIView {
 
     // MARK: - Public
 
-    public func startAnimations() {
+    @objc public func startAnimations() {
         stopAnimations()
 
         animationDataSource = buildAnimationDataSource()
@@ -132,7 +132,7 @@ public class APKenBurnsView: UIView {
         }
     }
 
-    public func pauseAnimations() {
+    @objc public func pauseAnimations() {
         firstItemView.backupAnimations()
         secondItemView.backupAnimations()
 
@@ -140,7 +140,7 @@ public class APKenBurnsView: UIView {
         layer.pauseAnimations()
     }
 
-    public func resumeAnimations() {
+    @objc public func resumeAnimations() {
         firstItemView.restoreAnimations()
         secondItemView.restoreAnimations()
 
@@ -148,7 +148,7 @@ public class APKenBurnsView: UIView {
         layer.resumeAnimations()
     }
 
-    public func stopAnimations() {
+    @objc public func stopAnimations() {
         timer?.cancel()
         layer.removeAllAnimations()
     }
