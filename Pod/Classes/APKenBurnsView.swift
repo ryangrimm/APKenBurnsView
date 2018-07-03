@@ -167,7 +167,9 @@ public class APKenBurnsView: UIView {
             
             var asyncItem = AsyncItem()
             dataSource.item(forKenBurnsView: self, atIndex: self.index) { item in
-                asyncItem.item = item
+                DispatchQueue.main.async {
+                    asyncItem.item = item
+                }
             }
             
             animationDataSource = buildAnimationDataSource()
@@ -298,7 +300,9 @@ public class APKenBurnsView: UIView {
         var nextAsyncItem = AsyncItem()
         if let dataSource = self.dataSource {
             dataSource.item(forKenBurnsView: self, atIndex: self.index) { item in
-                nextAsyncItem.item = item
+                DispatchQueue.main.async {
+                    nextAsyncItem.item = item
+                }
             }
         }
         
