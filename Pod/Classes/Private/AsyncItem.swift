@@ -4,6 +4,8 @@ import Foundation
 internal class AsyncItem {
     var ready: Bool = false
     
+    init() {}
+    
     var itemReady: ((APKenBurnsItem) -> Void)? {
         didSet {
             if ready {

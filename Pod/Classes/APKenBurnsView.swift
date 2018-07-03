@@ -302,7 +302,6 @@ public class APKenBurnsView: UIView {
             }
         }
         
-        var asyncItem = asyncItem
         asyncItem.itemReady = { item in
             DispatchQueue.main.async {
                 let duration = self.buildAnimationDuration()
