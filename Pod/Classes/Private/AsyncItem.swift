@@ -1,7 +1,7 @@
 
 import Foundation
 
-internal struct AsyncItem {
+internal class AsyncItem {
     var ready: Bool = false
     
     var itemReady: ((APKenBurnsItem) -> Void)? {
