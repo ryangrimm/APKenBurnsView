@@ -8,11 +8,17 @@ import QuartzCore
 import AVFoundation
 
 @objc public protocol APKenBurnsViewDataSource {
+    
     /*
-        Main data source method. Data source should provide next image.
-        If no image provided (data source returns nil) then previous image will be used one more time.
-    */
-    func nextItemForKenBurnsView(kenBurnsView: APKenBurnsView) -> APKenBurnsItem?
+     The total number of items that the view will display.
+     */
+    func numberOfItemsIn(kenBurnsView: APKenBurnsView) -> Int
+    
+    /*
+     Provides the actual items for the view to display. Once the
+     item is ready, use the `setItem` callback to provide it.
+     */
+    func item(forKenBurnsView: APKenBurnsView, atIndex: Int, setItem:((APKenBurnsItem)->Void)) -> Void
 }
 
 
@@ -35,7 +41,6 @@ public enum APKenBurnsViewFaceRecognitionMode {
     case Biggest      // recognizes biggest face in image, if any then transition will start or will finish (chosen randomly) in center of face rect.
     case Group        // recognizes all faces in image, if any then transition will start or will finish (chosen randomly) in center of compound rect of all faces.
 }
-
 
 public class APKenBurnsView: UIView {
 
@@ -100,6 +105,8 @@ public class APKenBurnsView: UIView {
     */
     @IBInspectable public var showFaceRectangles: Bool = false
 
+    public var numberOfItemsInView: Int = 0
+    
 
     // MARK: - Init
 
@@ -113,22 +120,62 @@ public class APKenBurnsView: UIView {
         setup()
     }
 
-
+    @objc public func showPreviousItem() {
+        stopAnimations()
+        let onscreen = firstItemView.alpha > 0.5 ? firstItemView : secondItemView
+        if let item = onscreen?.item {
+            if item.itemType == .video {
+                item.player?.pause()
+            }
+        }
+        
+        self.index -= 2
+        if self.index < 0 {
+            self.index = 0
+        }
+        startAnimations()
+    }
+    
+    @objc public func showNextItem() {
+        if timer != nil && timer!.isValid {
+            let onscreen = firstItemView.alpha > 0.5 ? firstItemView : secondItemView
+            UIView.animate(withDuration: 0.25, animations: {
+                onscreen!.alpha = 0
+            })
+            timer!.fire()
+        }
+        else {
+            stopAnimations()
+            incrementIndex()
+            startAnimations()
+        }
+    }
+    
     // MARK: - Public
 
     @objc public func startAnimations() {
         stopAnimations()
 
-        animationDataSource = buildAnimationDataSource()
-
-        firstItemView.alpha = 1.0
-        secondItemView.alpha = 0.0
-
-        stopWatch = StopWatch()
-
-        let item = dataSource?.nextItemForKenBurnsView(kenBurnsView: self)
-        if item != nil {
-            startTransitionWithItem(item: item!, itemView: firstItemView, nextItemView: secondItemView)
+        if let dataSource = dataSource {
+            numberOfItemsInView = dataSource.numberOfItemsIn(kenBurnsView: self)
+            if numberOfItemsInView == 0 {
+                return;
+            }
+            if self.index >= numberOfItemsInView {
+                self.index = 0
+            }
+            
+            var asyncItem = AsyncItem()
+            dataSource.item(forKenBurnsView: self, atIndex: self.index) { item in
+                asyncItem.item = item
+            }
+            
+            animationDataSource = buildAnimationDataSource()
+            
+            firstItemView.alpha = 1.0
+            secondItemView.alpha = 0.0
+            
+            startTransitionToItem(asyncItem: asyncItem, itemView: firstItemView, nextItemView: secondItemView)
         }
     }
 
@@ -165,12 +212,15 @@ public class APKenBurnsView: UIView {
     private let notificationCenter = NotificationCenter.default
 
     private var timer: BlockTimer?
-    private var stopWatch: StopWatch!
 
+    var index = 0;
+    var nextAsyncItem: AsyncItem?
 
     // MARK: - Setup
 
     private func setup() {
+        self.index = 0
+        
         firstItemView = buildDefaultItemView()
         secondItemView = buildDefaultItemView()
         facesDrawer = FacesDrawer()
@@ -236,30 +286,39 @@ public class APKenBurnsView: UIView {
                                                                     faceRecognitionMode: faceRecognitionMode)
         return animationDataSourceFactory.buildAnimationDataSource()
     }
-
-    private func startTransitionWithItem(item: APKenBurnsItem, itemView: ItemView, nextItemView: ItemView) {
+    
+    private func startTransitionToItem(asyncItem: AsyncItem, itemView: ItemView, nextItemView: ItemView) {
         guard isValidAnimationDurations() else {
             fatalError("Animation durations setup is invalid!")
         }
-
-        DispatchQueue.main.async {
-            self.stopWatch.start()
-
+        
+        self.incrementIndex()
+        
+        // Prefetch the next item
+        var nextAsyncItem = AsyncItem()
+        if let dataSource = self.dataSource {
+            dataSource.item(forKenBurnsView: self, atIndex: self.index) { item in
+                nextAsyncItem.item = item
+            }
+        }
+        
+        var asyncItem = asyncItem
+        asyncItem.itemReady = { item in
             DispatchQueue.main.async {
-                let duration = item.duration != nil ? item.duration! : self.buildAnimationDuration()
+                let duration = self.buildAnimationDuration()
                 var delay: Double
-
+                
+                itemView.item = item
+                
                 if item.itemType == .image {
-                    var animation = self.animationDataSource.buildAnimationForImage(image: item.image!, forViewPortSize: self.bounds.size)
-
-                    let animationTimeCompensation = self.stopWatch.duration
+                    var animation = self.animationDataSource.buildAnimationForImage(image: item.image!, forViewPortSize: self.bounds.size, durationOverride: item.duration)
+                    
                     animation = ImageAnimation(startState: animation.startState,
                                                endState: animation.endState,
-                                               duration: animation.duration - animationTimeCompensation)
+                                               duration: animation.duration)
                     
-                    itemView.item = item
                     itemView.animateWithImageAnimation(animation: animation)
-
+                    
                     if self.showFaceRectangles {
                         self.facesDrawer.drawFacesInView(view: itemView.imageView!, image: item.image!)
                     }
@@ -267,45 +326,45 @@ public class APKenBurnsView: UIView {
                     delay = animation.duration - duration / 2
                 }
                 else {
-                    delay = Double(CMTimeGetSeconds((item.player?.currentItem?.asset.duration)!))
-                    if delay > duration {
-                        delay = duration
+                    delay = item.duration != nil ? item.duration! : self.imageAnimationDuration
+                    let itemDuration = Double(CMTimeGetSeconds((item.player?.currentItem?.asset.duration)!))
+                    if delay > itemDuration {
+                        delay = itemDuration
                     }
                     
-                    itemView.item = item
+                    delay = delay - duration / 2
+
                     itemView.transform = CGAffineTransform.identity
                     item.player?.seek(to: CMTimeMake(0, 30))
                     item.player?.play()
                 }
                 
-                // Prefetch the next item
-                var nextItem = self.dataSource?.nextItemForKenBurnsView(kenBurnsView: self)
-
                 self.startTimerWithDelay(delay: delay) {
-
                     self.delegate?.kenBurnsViewDidStartTransition?(kenBurnsView: self, toItem: item)
-
-                    // Hold on to the current player because by the time the animation is finished the reference to the player has been lost
-                    let currentPlayer = item.itemType == .video ? itemView.item?.player : nil
                     
                     self.animateTransitionWithDuration(duration: duration, itemView: itemView, nextItemView: nextItemView) {
-                        if let player = currentPlayer {
-                            player.pause()
+                        if item.itemType == .video {
+                            if let player = item.player {
+                                player.pause()
+                            }
                         }
                         
                         self.delegate?.kenBurnsViewDidFinishTransition?(kenBurnsView: self)
                         if self.showFaceRectangles && item.itemType == .image {
-                            self.facesDrawer.cleanUpForView(view: itemView.imageView!)
+                            self.facesDrawer.cleanUpForView(view: nextItemView.imageView!)
                         }
                     }
-
-                    if nextItem == nil {
-                        nextItem = item
-                    }
-
-                    self.startTransitionWithItem(item: nextItem!, itemView: nextItemView, nextItemView: itemView)
+                    
+                    self.startTransitionToItem(asyncItem: nextAsyncItem, itemView: nextItemView, nextItemView: itemView)
                 }
             }
+        }
+    }
+
+    private func incrementIndex() {
+        self.index += 1
+        if self.index == self.numberOfItemsInView {
+            self.index = 0
         }
     }
 

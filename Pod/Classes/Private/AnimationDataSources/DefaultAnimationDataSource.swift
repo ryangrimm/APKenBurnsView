@@ -24,7 +24,7 @@ class DefaultAnimationDataSource: AnimationDataSource {
 
     // MARK: - Public
 
-    func buildAnimationForImage(image: UIImage, forViewPortSize viewPortSize: CGSize) -> ImageAnimation {
+    func buildAnimationForImage(image: UIImage, forViewPortSize viewPortSize: CGSize, durationOverride: Double? = nil) -> ImageAnimation {
         let imageSize = image.size
 
         let startScale = animationCalculator.buildRandomScale(imageSize: imageSize, viewPortSize: viewPortSize)
@@ -39,7 +39,7 @@ class DefaultAnimationDataSource: AnimationDataSource {
                                                                               imageSize: scaledEndImageSize,
                                                                               viewPortSize: viewPortSize)
 
-        let duration = animationCalculator.buildAnimationDuration()
+        let duration = durationOverride != nil ? durationOverride! : animationCalculator.buildAnimationDuration()
 
         let imageStartState = ImageState(scale: startScale, position: imageStartPosition)
         let imageEndState = ImageState(scale: endScale, position: imageEndPosition)

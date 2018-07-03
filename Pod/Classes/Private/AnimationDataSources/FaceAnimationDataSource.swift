@@ -54,9 +54,9 @@ class FaceAnimationDataSource: AnimationDataSource {
 
     // MARK: - Public
 
-    func buildAnimationForImage(image: UIImage, forViewPortSize viewPortSize: CGSize) -> ImageAnimation {
+    func buildAnimationForImage(image: UIImage, forViewPortSize viewPortSize: CGSize, durationOverride: Double? = nil) -> ImageAnimation {
         guard let faceRect = findFaceRect(image: image) else {
-            return backupAnimationDataSource.buildAnimationForImage(image: image, forViewPortSize: viewPortSize)
+            return backupAnimationDataSource.buildAnimationForImage(image: image, forViewPortSize: viewPortSize, durationOverride: durationOverride)
         }
 
         let imageSize = image.size
@@ -94,7 +94,7 @@ class FaceAnimationDataSource: AnimationDataSource {
                                                                               viewPortSize: viewPortSize)
         }
 
-        let duration = animationCalculator.buildAnimationDuration()
+        let duration = durationOverride != nil ? durationOverride! : animationCalculator.buildAnimationDuration()
 
         let imageStartState = ImageState(scale: startScale, position: imageStartPosition)
         let imageEndState = ImageState(scale: endScale, position: imageEndPosition)

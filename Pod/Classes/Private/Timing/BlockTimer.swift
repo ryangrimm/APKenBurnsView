@@ -44,6 +44,19 @@ class BlockTimer {
         timer = nil
         callback = nil
     }
+    
+    func fire() {
+        timer?.fire()
+    }
+    
+    var isValid: Bool {
+        get {
+            if let timer = timer {
+                return timer.isValid
+            }
+            return false
+        }
+    }
 
     @objc func timerFired(timer: Timer) {
         callback?()

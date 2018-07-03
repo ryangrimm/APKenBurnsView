@@ -23,10 +23,6 @@ class KenBurnsViewController: UIViewController {
     
     var items: [APKenBurnsItem]? = nil
 
-    // MARK: - Private Variables
-
-    private var index: Int = 0
-
     // MARK: - Lifecycle
 
     override func viewDidLoad() {
@@ -59,9 +55,16 @@ class KenBurnsViewController: UIViewController {
 }
 
 extension KenBurnsViewController: APKenBurnsViewDataSource {
-    func nextItemForKenBurnsView(kenBurnsView: APKenBurnsView) -> APKenBurnsItem? {
-        let item = items![index]
-        index = index == (items?.count)! - 1 ? 0 : index + 1
-        return item
+    func numberOfItemsIn(kenBurnsView: APKenBurnsView) -> Int {
+        if let items = self.items {
+            return items.count
+        }
+        else {
+            return 0
+        }
+    }
+    
+    func item(forKenBurnsView: APKenBurnsView, atIndex: Int, setItem: ((APKenBurnsItem) -> Void)) {
+         setItem(items![atIndex])
     }
 }
