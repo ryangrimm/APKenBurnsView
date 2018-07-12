@@ -7,8 +7,8 @@
 
 import Foundation
 
-extension UIView {
-    @objc func applyKenBurnsAnimation(image: UIImage,
+@objc extension UIView {
+    func applyKenBurnsAnimation(image: UIImage,
                                 forViewPortSize viewPortSize: CGSize,
                                 duration: Double,
                                 scaleFactorDeviation: Float = 1.0,
@@ -32,17 +32,17 @@ extension UIView {
         self.animateWithImageAnimation(animation: animation)
     }
     
-    @objc public func pauseAnimations() {
+    public func pauseAnimations() {
         self.backupAnimations()
         layer.pauseAnimations()
     }
     
-    @objc public func resumeAnimations() {
+    public func resumeAnimations() {
         self.restoreAnimations()
         layer.resumeAnimations()
     }
     
-    @objc public func stopAnimations() {
+    public func stopAnimations() {
         layer.removeAllAnimations()
     }
 }
