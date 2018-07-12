@@ -8,7 +8,7 @@
 import Foundation
 
 @objc extension UIView {
-    func applyKenBurnsAnimation(image: UIImage,
+    public func applyKenBurnsAnimation(image: UIImage,
                                 forViewPortSize viewPortSize: CGSize,
                                 duration: Double,
                                 scaleFactorDeviation: Float = 1.0,
